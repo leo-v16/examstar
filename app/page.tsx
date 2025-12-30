@@ -4,8 +4,7 @@ import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { Input } from "@/components/ui/input";
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Search, GraduationCap, ChevronRight, Loader2, BookOpen } from "lucide-react";
+import { Search, GraduationCap, ChevronRight, BookOpen } from "lucide-react";
 import { getAllExams, Exam } from "@/lib/firestore";
 import { cn } from "@/lib/utils";
 
@@ -120,7 +119,7 @@ export default function HomePage() {
             <div className="space-y-1">
               <h3 className="text-lg font-semibold">No exams found</h3>
               <p className="text-muted-foreground max-w-xs mx-auto">
-                We couldn't find any exams matching "{query}". Try searching for something else.
+                We couldn&apos;t find any exams matching &quot;{query}&quot;. Try searching for something else.
               </p>
             </div>
           </div>

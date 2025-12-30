@@ -17,9 +17,8 @@ import {
   SheetDescription,
 } from "@/components/ui/sheet";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Card } from "@/components/ui/card";
 import { ChevronRight, Layers, Loader2 } from "lucide-react";
-import { getExamStructure, ExamStructure, Subject } from "@/lib/firestore";
+import { getExamStructure, ExamStructure } from "@/lib/firestore";
 import ResourceList from "@/components/ResourceList";
 
 export default function ExamPage() {
@@ -44,7 +43,7 @@ export default function ExamPage() {
       try {
         const data = await getExamStructure(examId);
         setStructure(data);
-        if (data?.subjects.length > 0) {
+        if (data && data.subjects.length > 0) {
           setActiveSubject(data.subjects[0].name);
         }
       } catch (error) {
@@ -80,7 +79,7 @@ export default function ExamPage() {
         <Layers className="h-12 w-12 text-muted-foreground" />
         <h2 className="text-xl font-semibold">Exam Not Found</h2>
         <p className="text-muted-foreground">
-          The exam structure for "{examId}" could not be loaded.
+          The exam structure for &quot;{examId}&quot; could not be loaded.
         </p>
       </div>
     );

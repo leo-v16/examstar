@@ -31,9 +31,10 @@ export default function LoginPage() {
     try {
       await signInWithEmailAndPassword(auth, email, password);
       router.push("/admin");
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Login failed:", err);
-      if (err.code === 'auth/invalid-credential' || err.code === 'auth/wrong-password' || err.code === 'auth/user-not-found') {
+      const code = (err as { code?: string })?.code;
+      if (code === 'auth/invalid-credential' || code === 'auth/wrong-password' || code === 'auth/user-not-found') {
         setError("Invalid email or password.");
       } else {
         setError("Login failed. Please try again.");
