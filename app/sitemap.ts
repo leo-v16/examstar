@@ -2,7 +2,7 @@ import { MetadataRoute } from 'next';
 import { getAllExamIdsAction } from '@/app/actions';
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://examstar.vercel.app'; // Fallback to a default if not set
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://exam-star.vercel.app'; // Fallback to a default if not set
 
   // Static routes
   const routes = [
