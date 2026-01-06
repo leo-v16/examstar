@@ -1,14 +1,22 @@
 import { MetadataRoute } from 'next';
 
 export default function robots(): MetadataRoute.Robots {
-  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://examstar.vercel.app';
+  const baseUrl =
+    process.env.NEXT_PUBLIC_BASE_URL || 'https://exam-star.vercel.app';
 
   return {
-    rules: {
-      userAgent: '*',
-      allow: '/',
-      disallow: ['/admin/', '/login'],
-    },
+    rules: [
+      {
+        userAgent: '*',
+        allow: '/',
+        disallow: [
+          '/login',
+          '/admin',
+          '/dashboard',
+          '/api',
+        ],
+      },
+    ],
     sitemap: `${baseUrl}/sitemap.xml`,
   };
 }
