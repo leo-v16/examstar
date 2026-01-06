@@ -10,6 +10,8 @@ import { getAllExams, Exam } from "@/lib/firestore";
 import { cn } from "@/lib/utils";
 import { ModeToggle } from "@/components/ModeToggle";
 
+const ENABLE_GLOW_ANIMATION = true;
+
 export default function HomePage() {
   const [query, setQuery] = useState("");
   const [exams, setExams] = useState<Exam[]>([]);
@@ -36,12 +38,24 @@ export default function HomePage() {
     return name.toLowerCase().includes(searchLower);
   });
 
+  // 1. UPDATED: More vibrant gradients to make the glow visible
   const gradients = [
-    "from-blue-500 to-cyan-400",
-    "from-purple-500 to-pink-400",
-    "from-orange-400 to-red-400",
-    "from-emerald-400 to-green-500",
+    "from-blue-500 via-cyan-400 to-blue-500",
+    "from-purple-500 via-pink-400 to-purple-500",
+    "from-orange-400 via-red-400 to-orange-400",
+    "from-emerald-400 via-green-500 to-emerald-400",
   ];
+
+  // 2. NEW: Helper function to match the shadow color with the strip color
+  const getShadowColor = (idx: number) => {
+    const colors = [
+      "shadow-blue-500/50", 
+      "shadow-purple-500/50", 
+      "shadow-orange-400/50", 
+      "shadow-emerald-400/50"
+    ];
+    return colors[idx % colors.length];
+  };
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -53,20 +67,17 @@ export default function HomePage() {
       {/* Hero Section */}
       <section className="py-12 px-6 flex flex-col items-center justify-center text-center space-y-6 bg-muted/20 border-b">
         <div className="flex flex-col items-center gap-4">
-          <div className="bg-primary/5 p-2 rounded-full overflow-hidden flex items-center justify-center shadow-sm">
+          <div className="bg-primary/5 p-4 rounded-md overflow-hidden flex items-center justify-center shadow-sm">
             <Image 
               src="/exam-star-main.png" 
               alt="ExamEdge Logo" 
-              width={200} 
-              height={200} 
+              width={220} 
+              height={220} 
               className="object-cover"
             />
           </div>
         </div>
         <div className="space-y-2 max-w-lg">
-          <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">
-            Find Your Exam
-          </h1>
           <p className="text-muted-foreground text-lg">
             Access previous year questions and notes for your preparation.
           </p>
@@ -96,18 +107,32 @@ export default function HomePage() {
             {filteredExams.map((exam, idx) => {
               const displayName = exam.name || exam.id.replace(/-/g, " ");
               const gradient = gradients[idx % gradients.length];
+              const shadowColor = getShadowColor(idx); // Get the matching shadow
               
               return (
                 <Link href={`/exam/${exam.id}`} key={exam.id} className="block group h-full">
-                  <Card className="h-full overflow-hidden border transition-all duration-300 hover:shadow-lg hover:-translate-y-1 group-hover:border-primary/50">
-                    <div className={cn("h-2 w-full bg-gradient-to-r", gradient)} />
+                  {/* Added 'relative' to Card so elements position correctly inside */}
+                  <Card className="h-full overflow-hidden border transition-all duration-300 hover:shadow-lg hover:-translate-y-1 group-hover:border-primary/50 relative">
+                    
+                    {/* 3. UPDATED: The Animated Glow Strip */}
+                    <div 
+                      className={cn(
+                        "h-2 w-full bg-gradient-to-r", 
+                        // Increase background size to allow movement
+                        "bg-[length:200%_auto]", 
+                        gradient,
+                        // Add the shadow glow
+                        `shadow-[0_0_15px_-3px] ${shadowColor}`,
+                        // Apply the animation
+                        ENABLE_GLOW_ANIMATION && "animate-gradient-x"
+                      )} 
+                    />
+
                     <CardHeader className="pb-2">
                       <div className="flex justify-between items-start">
                         <div className="bg-muted p-2 rounded-md group-hover:bg-primary/10 transition-colors">
                           <BookOpen className="h-5 w-5 text-muted-foreground group-hover:text-primary" />
                         </div>
-                         {/* Placeholder for future tags/badges */}
-                         {/* <Badge variant="outline" className="text-xs font-normal">Active</Badge> */}
                       </div>
                       <CardTitle className="mt-4 text-xl capitalize line-clamp-1">
                         {displayName}
