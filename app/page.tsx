@@ -45,8 +45,11 @@ export default function HomePage() {
     <div className="min-h-screen bg-background flex flex-col">
       {/* Hero Section */}
       <section className="py-12 px-6 flex flex-col items-center justify-center text-center space-y-6 bg-muted/20 border-b">
-        <div className="bg-primary/10 p-3 rounded-full">
-          <GraduationCap className="h-10 w-10 text-primary" />
+        <div className="flex flex-col items-center gap-2">
+          <div className="bg-primary/10 p-3 rounded-full">
+            <GraduationCap className="h-10 w-10 text-primary" />
+          </div>
+          <span className="text-xl font-bold tracking-tight text-primary">ExamEdge</span>
         </div>
         <div className="space-y-2 max-w-lg">
           <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">

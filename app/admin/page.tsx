@@ -11,8 +11,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ExamStructure } from "@/lib/firestore";
-import { getExamStructureAction, saveExamStructureAction } from "@/app/actions";
-import { Loader2, LogOut, ShieldAlert } from "lucide-react";
+import { getExamStructureAction, saveExamStructureAction, getAllExamIdsAction, deleteExamAction } from "@/app/actions";
+import { Loader2, LogOut, ShieldAlert, Trash2 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 
 const AUTHORIZED_EMAIL = process.env.NEXT_PUBLIC_FIREBASE_ALLOWED_EMAIL;
 
@@ -26,6 +27,7 @@ export default function AdminPage() {
   const [structure, setStructure] = useState<ExamStructure | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadedExamId, setLoadedExamId] = useState<string | null>(null);
+  const [availableSlugs, setAvailableSlugs] = useState<string[]>([]);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
@@ -33,6 +35,7 @@ export default function AdminPage() {
         router.push("/login");
       } else {
         setUser(currentUser);
+        fetchAvailableSlugs();
       }
       setAuthLoading(false);
     });
@@ -40,19 +43,29 @@ export default function AdminPage() {
     return () => unsubscribe();
   }, [router]);
 
+  const fetchAvailableSlugs = async () => {
+    const result = await getAllExamIdsAction();
+    if (result.success && result.data) {
+      setAvailableSlugs(result.data);
+    }
+  };
+
   const handleLogout = async () => {
     await signOut(auth);
     router.push("/login");
   };
 
-  const handleLoad = async () => {
-    if (!examId.trim()) return;
+  const handleLoad = async (idToLoad?: string) => {
+    const targetId = idToLoad || examId;
+    if (!targetId.trim()) return;
     setLoading(true);
     try {
-      const result = await getExamStructureAction(examId);
+      const result = await getExamStructureAction(targetId);
       if (result.success && result.data) {
         setStructure(result.data);
-        setLoadedExamId(examId);
+        setLoadedExamId(targetId);
+        setExamId(targetId);
+        fetchAvailableSlugs();
       } else {
         throw new Error(result.error || "Unknown error");
       }
@@ -72,12 +85,40 @@ export default function AdminPage() {
       if (result.success) {
         alert("Structure saved successfully!");
         setStructure(newStructure);
+        fetchAvailableSlugs();
       } else {
         throw new Error(result.error || "Unknown error");
       }
     } catch (error) {
       console.error("Error saving structure:", error);
       alert("Failed to save structure.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDelete = async (idToDelete: string) => {
+    if (!confirm(`Are you sure you want to delete the exam structure for "${idToDelete}"? This action cannot be undone.`)) {
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const result = await deleteExamAction(idToDelete);
+      if (result.success) {
+        alert("Exam deleted successfully!");
+        if (loadedExamId === idToDelete) {
+          setStructure(null);
+          setLoadedExamId(null);
+          setExamId("");
+        }
+        fetchAvailableSlugs();
+      } else {
+        throw new Error(result.error || "Unknown error");
+      }
+    } catch (error) {
+      console.error("Error deleting exam:", error);
+      alert("Failed to delete exam.");
     } finally {
       setLoading(false);
     }
@@ -136,7 +177,7 @@ export default function AdminPage() {
               <CardTitle>Select Exam</CardTitle>
               <CardDescription>Enter the exam slug (e.g., &apos;jee-mains&apos;) to edit its structure.</CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-4">
               <div className="flex gap-4">
                 <Input 
                   placeholder="Exam ID (slug)" 
@@ -144,11 +185,39 @@ export default function AdminPage() {
                   onChange={(e) => setExamId(e.target.value)}
                   className="max-w-xs"
                 />
-                <Button onClick={handleLoad} disabled={loading || !examId.trim()}>
+                <Button onClick={() => handleLoad()} disabled={loading || !examId.trim()}>
                   {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   {loadedExamId === examId ? "Reload" : "Load Structure"}
                 </Button>
               </div>
+
+              {availableSlugs.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-sm font-medium text-muted-foreground">Available Slugs:</p>
+                  <div className="flex flex-wrap gap-2">
+                    {availableSlugs.map((slug) => (
+                      <div key={slug} className="group relative">
+                        <Badge 
+                          variant={loadedExamId === slug ? "default" : "secondary"}
+                          className="cursor-pointer hover:bg-primary/80 transition-colors pr-7"
+                          onClick={() => handleLoad(slug)}
+                        >
+                          {slug}
+                        </Badge>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDelete(slug);
+                          }}
+                          className="absolute right-1 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity p-0.5"
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -156,6 +225,15 @@ export default function AdminPage() {
             <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
               <div className="flex items-center justify-between">
                 <h2 className="text-xl font-semibold">Editing: <span className="font-mono text-primary">{loadedExamId}</span></h2>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="text-destructive hover:bg-destructive/10 border-destructive/20 gap-2"
+                  onClick={() => handleDelete(loadedExamId)}
+                  disabled={loading}
+                >
+                  <Trash2 size={16} /> Delete Exam
+                </Button>
               </div>
               <SkeletonBuilder 
                 key={loadedExamId} // Force remount on ID change

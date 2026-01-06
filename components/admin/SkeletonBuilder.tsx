@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { Plus, Trash, ChevronRight, Save } from "lucide-react";
+import { Plus, Trash, ChevronRight, Save, Pencil, ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
@@ -27,11 +27,20 @@ export default function SkeletonBuilder({ initialStructure, onSave }: SkeletonBu
   const [selectedSubjectIndex, setSelectedSubjectIndex] = useState<number | null>(null);
   const [selectedClassIndex, setSelectedClassIndex] = useState<number | null>(null);
 
+  // Mobile navigation state
+  const [mobileView, setMobileView] = useState<'subjects' | 'classes' | 'chapters'>('subjects');
+
   // Dialog states
   const [newItemName, setNewItemName] = useState("");
+  const [editItemName, setEditItemName] = useState("");
+
   const [isAddingSubject, setIsAddingSubject] = useState(false);
   const [isAddingClass, setIsAddingClass] = useState(false);
   const [isAddingChapter, setIsAddingChapter] = useState(false);
+
+  const [editingSubjectIndex, setEditingSubjectIndex] = useState<number | null>(null);
+  const [editingClassIndex, setEditingClassIndex] = useState<number | null>(null);
+  const [editingChapterIndex, setEditingChapterIndex] = useState<number | null>(null);
 
   // -- Handlers --
 
@@ -41,6 +50,15 @@ export default function SkeletonBuilder({ initialStructure, onSave }: SkeletonBu
     setStructure(prev => ({ ...prev, subjects: [...prev.subjects, newSubject] }));
     setNewItemName("");
     setIsAddingSubject(false);
+  };
+
+  const handleUpdateSubject = () => {
+    if (editingSubjectIndex === null || !editItemName.trim()) return;
+    const newSubjects = [...structure.subjects];
+    newSubjects[editingSubjectIndex].name = editItemName;
+    setStructure({ ...structure, subjects: newSubjects });
+    setEditingSubjectIndex(null);
+    setEditItemName("");
   };
 
   const handleDeleteSubject = (index: number) => {
@@ -63,6 +81,15 @@ export default function SkeletonBuilder({ initialStructure, onSave }: SkeletonBu
     setIsAddingClass(false);
   };
 
+  const handleUpdateClass = () => {
+    if (selectedSubjectIndex === null || editingClassIndex === null || !editItemName.trim()) return;
+    const newSubjects = [...structure.subjects];
+    newSubjects[selectedSubjectIndex].classes[editingClassIndex].name = editItemName;
+    setStructure({ ...structure, subjects: newSubjects });
+    setEditingClassIndex(null);
+    setEditItemName("");
+  };
+
   const handleDeleteClass = (index: number) => {
     if (selectedSubjectIndex === null) return;
     const newSubjects = [...structure.subjects];
@@ -82,6 +109,15 @@ export default function SkeletonBuilder({ initialStructure, onSave }: SkeletonBu
     setIsAddingChapter(false);
   };
 
+  const handleUpdateChapter = () => {
+    if (selectedSubjectIndex === null || selectedClassIndex === null || editingChapterIndex === null || !editItemName.trim()) return;
+    const newSubjects = [...structure.subjects];
+    newSubjects[selectedSubjectIndex].classes[selectedClassIndex].chapters[editingChapterIndex] = editItemName;
+    setStructure({ ...structure, subjects: newSubjects });
+    setEditingChapterIndex(null);
+    setEditItemName("");
+  };
+
   const handleDeleteChapter = (index: number) => {
     if (selectedSubjectIndex === null || selectedClassIndex === null) return;
     const newSubjects = [...structure.subjects];
@@ -95,10 +131,12 @@ export default function SkeletonBuilder({ initialStructure, onSave }: SkeletonBu
 
   // -- Render Helpers --
 
-  const renderAddItemDialog = (
+  const renderInputDialog = (
     isOpen: boolean, 
     onOpenChange: (open: boolean) => void, 
     title: string, 
+    value: string,
+    setValue: (val: string) => void,
     onConfirm: () => void
   ) => (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
@@ -108,15 +146,15 @@ export default function SkeletonBuilder({ initialStructure, onSave }: SkeletonBu
         </DialogHeader>
         <div className="py-4">
           <Input 
-            value={newItemName} 
-            onChange={(e) => setNewItemName(e.target.value)} 
+            value={value} 
+            onChange={(e) => setValue(e.target.value)} 
             placeholder="Enter name..." 
             onKeyDown={(e) => { if(e.key === 'Enter') onConfirm(); }}
           />
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button onClick={onConfirm}>Add</Button>
+          <Button onClick={onConfirm}>Save</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -136,7 +174,7 @@ export default function SkeletonBuilder({ initialStructure, onSave }: SkeletonBu
       <div className="flex flex-1 overflow-hidden">
         
         {/* Column 1: Subjects */}
-        <div className="flex-1 border-r flex flex-col min-w-[200px]">
+        <div className={cn("flex-1 border-r flex flex-col min-w-[200px]", mobileView !== 'subjects' ? "hidden md:flex" : "flex")}>
           <div className="p-3 border-b flex justify-between items-center bg-muted/10">
             <span className="font-medium text-sm text-muted-foreground">Subjects</span>
             <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => setIsAddingSubject(true)}>
@@ -148,7 +186,11 @@ export default function SkeletonBuilder({ initialStructure, onSave }: SkeletonBu
               {structure.subjects.map((subject, idx) => (
                 <div 
                   key={idx}
-                  onClick={() => { setSelectedSubjectIndex(idx); setSelectedClassIndex(null); }}
+                  onClick={() => { 
+                    setSelectedSubjectIndex(idx); 
+                    setSelectedClassIndex(null); 
+                    setMobileView('classes');
+                  }}
                   className={cn(
                     "flex items-center justify-between px-3 py-2 rounded-md cursor-pointer text-sm transition-colors",
                     selectedSubjectIndex === idx ? "bg-primary text-primary-foreground" : "hover:bg-muted"
@@ -157,14 +199,28 @@ export default function SkeletonBuilder({ initialStructure, onSave }: SkeletonBu
                   <span className="truncate font-medium">{subject.name}</span>
                   <div className="flex items-center gap-1">
                     {selectedSubjectIndex === idx && (
-                      <Button 
-                        size="icon" 
-                        variant="ghost" 
-                        className="h-5 w-5 hover:bg-primary-foreground/20 text-primary-foreground"
-                        onClick={(e) => { e.stopPropagation(); handleDeleteSubject(idx); }}
-                      >
-                        <Trash size={12} />
-                      </Button>
+                      <>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-5 w-5 hover:bg-primary-foreground/20 text-primary-foreground"
+                          onClick={(e) => { 
+                            e.stopPropagation(); 
+                            setEditingSubjectIndex(idx);
+                            setEditItemName(subject.name);
+                          }}
+                        >
+                          <Pencil size={12} />
+                        </Button>
+                        <Button 
+                          size="icon" 
+                          variant="ghost" 
+                          className="h-5 w-5 hover:bg-primary-foreground/20 text-primary-foreground"
+                          onClick={(e) => { e.stopPropagation(); handleDeleteSubject(idx); }}
+                        >
+                          <Trash size={12} />
+                        </Button>
+                      </>
                     )}
                     <ChevronRight size={14} className={cn("opacity-50", selectedSubjectIndex === idx && "text-primary-foreground opacity-100")} />
                   </div>
@@ -180,9 +236,19 @@ export default function SkeletonBuilder({ initialStructure, onSave }: SkeletonBu
         </div>
 
         {/* Column 2: Classes */}
-        <div className="flex-1 border-r flex flex-col min-w-[200px] bg-background/50">
+        <div className={cn("flex-1 border-r flex flex-col min-w-[200px] bg-background/50", mobileView !== 'classes' ? "hidden md:flex" : "flex")}>
           <div className="p-3 border-b flex justify-between items-center bg-muted/10">
-            <span className="font-medium text-sm text-muted-foreground">Classes</span>
+            <div className="flex items-center gap-2">
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                className="h-6 w-6 md:hidden" 
+                onClick={() => setMobileView('subjects')}
+              >
+                <ArrowLeft size={14} />
+              </Button>
+              <span className="font-medium text-sm text-muted-foreground">Classes</span>
+            </div>
             <Button 
               size="icon" 
               variant="ghost" 
@@ -199,7 +265,10 @@ export default function SkeletonBuilder({ initialStructure, onSave }: SkeletonBu
                 structure.subjects[selectedSubjectIndex].classes.map((cls, idx) => (
                   <div 
                     key={idx}
-                    onClick={() => setSelectedClassIndex(idx)}
+                    onClick={() => {
+                      setSelectedClassIndex(idx);
+                      setMobileView('chapters');
+                    }}
                     className={cn(
                       "flex items-center justify-between px-3 py-2 rounded-md cursor-pointer text-sm transition-colors",
                       selectedClassIndex === idx ? "bg-primary text-primary-foreground" : "hover:bg-muted"
@@ -208,14 +277,28 @@ export default function SkeletonBuilder({ initialStructure, onSave }: SkeletonBu
                     <span className="truncate">{cls.name}</span>
                     <div className="flex items-center gap-1">
                       {selectedClassIndex === idx && (
-                        <Button 
-                          size="icon" 
-                          variant="ghost" 
-                          className="h-5 w-5 hover:bg-primary-foreground/20 text-primary-foreground"
-                          onClick={(e) => { e.stopPropagation(); handleDeleteClass(idx); }}
-                        >
-                          <Trash size={12} />
-                        </Button>
+                        <>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-5 w-5 hover:bg-primary-foreground/20 text-primary-foreground"
+                            onClick={(e) => { 
+                              e.stopPropagation(); 
+                              setEditingClassIndex(idx);
+                              setEditItemName(cls.name);
+                            }}
+                          >
+                            <Pencil size={12} />
+                          </Button>
+                          <Button 
+                            size="icon" 
+                            variant="ghost" 
+                            className="h-5 w-5 hover:bg-primary-foreground/20 text-primary-foreground"
+                            onClick={(e) => { e.stopPropagation(); handleDeleteClass(idx); }}
+                          >
+                            <Trash size={12} />
+                          </Button>
+                        </>
                       )}
                       <ChevronRight size={14} className={cn("opacity-50", selectedClassIndex === idx && "text-primary-foreground opacity-100")} />
                     </div>
@@ -236,9 +319,19 @@ export default function SkeletonBuilder({ initialStructure, onSave }: SkeletonBu
         </div>
 
         {/* Column 3: Chapters */}
-        <div className="flex-1 flex flex-col min-w-[200px] bg-background/50">
+        <div className={cn("flex-1 flex flex-col min-w-[200px] bg-background/50", mobileView !== 'chapters' ? "hidden md:flex" : "flex")}>
           <div className="p-3 border-b flex justify-between items-center bg-muted/10">
-            <span className="font-medium text-sm text-muted-foreground">Chapters</span>
+            <div className="flex items-center gap-2">
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                className="h-6 w-6 md:hidden" 
+                onClick={() => setMobileView('classes')}
+              >
+                <ArrowLeft size={14} />
+              </Button>
+              <span className="font-medium text-sm text-muted-foreground">Chapters</span>
+            </div>
             <Button 
               size="icon" 
               variant="ghost" 
@@ -258,14 +351,27 @@ export default function SkeletonBuilder({ initialStructure, onSave }: SkeletonBu
                     className="flex items-center justify-between px-3 py-2 rounded-md text-sm hover:bg-muted group"
                   >
                     <span className="truncate">{chapter}</span>
-                    <Button 
-                      size="icon" 
-                      variant="ghost" 
-                      className="h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity"
-                      onClick={() => handleDeleteChapter(idx)}
-                    >
-                      <Trash size={12} />
-                    </Button>
+                    <div className="flex items-center gap-1 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-5 w-5"
+                        onClick={() => { 
+                          setEditingChapterIndex(idx);
+                          setEditItemName(chapter);
+                        }}
+                      >
+                        <Pencil size={12} />
+                      </Button>
+                      <Button 
+                        size="icon" 
+                        variant="ghost" 
+                        className="h-5 w-5"
+                        onClick={() => handleDeleteChapter(idx)}
+                      >
+                        <Trash size={12} />
+                      </Button>
+                    </div>
                   </div>
                 ))
               ) : (
@@ -283,10 +389,36 @@ export default function SkeletonBuilder({ initialStructure, onSave }: SkeletonBu
         </div>
       </div>
 
-      {/* Dialogs */}
-      {renderAddItemDialog(isAddingSubject, setIsAddingSubject, "Add New Subject", handleAddSubject)}
-      {renderAddItemDialog(isAddingClass, setIsAddingClass, "Add New Class", handleAddClass)}
-      {renderAddItemDialog(isAddingChapter, setIsAddingChapter, "Add New Chapter", handleAddChapter)}
+      {/* Add Dialogs */}
+      {renderInputDialog(isAddingSubject, setIsAddingSubject, "Add New Subject", newItemName, setNewItemName, handleAddSubject)}
+      {renderInputDialog(isAddingClass, setIsAddingClass, "Add New Class", newItemName, setNewItemName, handleAddClass)}
+      {renderInputDialog(isAddingChapter, setIsAddingChapter, "Add New Chapter", newItemName, setNewItemName, handleAddChapter)}
+
+      {/* Edit Dialogs */}
+      {renderInputDialog(
+        editingSubjectIndex !== null, 
+        (open) => !open && setEditingSubjectIndex(null), 
+        "Rename Subject", 
+        editItemName, 
+        setEditItemName, 
+        handleUpdateSubject
+      )}
+      {renderInputDialog(
+        editingClassIndex !== null, 
+        (open) => !open && setEditingClassIndex(null), 
+        "Rename Class", 
+        editItemName, 
+        setEditItemName, 
+        handleUpdateClass
+      )}
+      {renderInputDialog(
+        editingChapterIndex !== null, 
+        (open) => !open && setEditingChapterIndex(null), 
+        "Rename Chapter", 
+        editItemName, 
+        setEditItemName, 
+        handleUpdateChapter
+      )}
     </div>
   );
 }

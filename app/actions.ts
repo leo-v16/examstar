@@ -44,3 +44,27 @@ export async function saveExamStructureAction(examId: string, structure: ExamStr
     return { success: false, error: errorMessage };
   }
 }
+
+export async function getAllExamIdsAction(): Promise<{ success: boolean; data?: string[]; error?: string }> {
+  try {
+    const snapshot = await adminDb.collection("exams").get();
+    const ids = snapshot.docs.map(doc => doc.id);
+    return { success: true, data: ids };
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : "An unknown error occurred";
+    console.error("Error fetching all exam IDs:", errorMessage);
+    return { success: false, error: errorMessage };
+  }
+}
+
+export async function deleteExamAction(examId: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    if (!examId) throw new Error("Exam ID is required");
+    await adminDb.collection("exams").doc(examId).delete();
+    return { success: true };
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : "An unknown error occurred";
+    console.error("Error deleting exam:", errorMessage);
+    return { success: false, error: errorMessage };
+  }
+}
