@@ -7,7 +7,8 @@ import {
   addDoc, 
   query, 
   where, 
-  getDocs 
+  getDocs,
+  deleteDoc
 } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 
@@ -96,20 +97,31 @@ export const addResource = async (resource: Omit<Resource, 'id'>) => {
   });
 };
 
+export const deleteResource = async (resourceId: string) => {
+  const resourceRef = doc(db, "resources", resourceId);
+  await deleteDoc(resourceRef);
+};
+
 export const getResources = async (
   examId: string, 
   subject: string, 
   classLevel: string, 
-  chapter: string
+  chapter: string,
+  type?: 'note' | 'pyq'
 ): Promise<Resource[]> => {
   const resourcesRef = collection(db, "resources");
-  const q = query(
-    resourcesRef, 
+  const constraints = [
     where("examId", "==", examId),
     where("subject", "==", subject),
     where("class", "==", classLevel),
     where("chapter", "==", chapter)
-  );
+  ];
+  
+  if (type) {
+    constraints.push(where("type", "==", type));
+  }
+
+  const q = query(resourcesRef, ...constraints);
   
   const snap = await getDocs(q);
   return snap.docs.map(d => ({ id: d.id, ...d.data() } as Resource));

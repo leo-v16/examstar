@@ -94,7 +94,8 @@ export default function ExamView({ examId }: ExamViewProps) {
   return (
     <div className="flex flex-col h-[100dvh] bg-background">
       {/* Header */}
-      <div className="px-4 py-3 border-b flex items-center gap-3 bg-card">
+      <div className="px-4 py-3 border-b flex items-center justify-between bg-card">
+         <h1 className="font-bold text-lg capitalize truncate">{examId.replace(/-/g, ' ')}</h1>
          <Button 
             variant="ghost" 
             size="icon" 
@@ -103,7 +104,6 @@ export default function ExamView({ examId }: ExamViewProps) {
           >
             <ArrowLeft className="h-5 w-5" />
          </Button>
-         <h1 className="font-bold text-lg capitalize truncate">{examId.replace(/-/g, ' ')}</h1>
       </div>
 
       <Tabs 
