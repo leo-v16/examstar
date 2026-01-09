@@ -8,6 +8,8 @@ import {
   Trash2,
   Plus,
   CalendarDays,
+  Pencil,
+  X,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -19,6 +21,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import {
   Card,
@@ -35,7 +38,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-import { addEvent, deleteEvent, getEvents, getAllExams, ExamEvent, Exam } from "@/lib/firestore";
+import { addEvent, deleteEvent, updateEvent, getEvents, getAllExams, ExamEvent, Exam } from "@/lib/firestore";
 import { Badge } from "@/components/ui/badge";
 
 export default function EventManager() {
@@ -43,6 +46,7 @@ export default function EventManager() {
   const [exams, setExams] = useState<Exam[]>([]);
   const [loading, setLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [editingEventId, setEditingEventId] = useState<string | null>(null);
 
   // Form State
   const [title, setTitle] = useState("");
@@ -75,6 +79,33 @@ export default function EventManager() {
     }
   };
 
+  const handleEdit = (event: ExamEvent) => {
+    setEditingEventId(event.id || null);
+    setTitle(event.title);
+    
+    // Ensure date is a proper Date object
+    const eventDate = (event.date as any).toDate 
+        ? (event.date as any).toDate() 
+        : new Date(event.date);
+        
+    setDate(eventDate);
+    setType(event.type);
+    setDescription(event.description || "");
+    setSelectedExamId(event.examId || "");
+    
+    // Scroll to top of form
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleCancelEdit = () => {
+    setEditingEventId(null);
+    setTitle("");
+    setDate(new Date());
+    setDescription("");
+    setType("exam");
+    setSelectedExamId("");
+  };
+
   const handleSave = async () => {
     if (!title || !date) {
       alert("Please provide a title and date.");
@@ -83,20 +114,22 @@ export default function EventManager() {
 
     setIsSaving(true);
     try {
-      await addEvent({
+      const eventData = {
         title,
         date,
         type,
         description,
-        ...(selectedExamId && { examId: selectedExamId }),
-      });
+        ...(selectedExamId && selectedExamId !== "none" && { examId: selectedExamId }),
+      };
+
+      if (editingEventId) {
+        await updateEvent(editingEventId, eventData);
+      } else {
+        await addEvent(eventData);
+      }
 
       // Reset form
-      setTitle("");
-      setDate(new Date());
-      setDescription("");
-      setType("exam");
-      setSelectedExamId("");
+      handleCancelEdit();
 
       // Refresh list
       const data = await getEvents();
@@ -119,6 +152,9 @@ export default function EventManager() {
     try {
       await deleteEvent(id);
       setEvents((prev) => prev.filter((e) => e.id !== id));
+      if (editingEventId === id) {
+        handleCancelEdit();
+      }
     } catch (error) {
       console.error("Failed to delete event:", error);
     }
@@ -137,13 +173,20 @@ export default function EventManager() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-8">
-          {/* Add Event Form */}
+          {/* Add/Edit Event Form */}
           <div className="space-y-4 border p-5 rounded-lg bg-muted/20">
-            <div className="flex items-center gap-2 mb-2">
-              <div className="h-6 w-1 bg-primary rounded-full" />
-              <h3 className="font-semibold text-sm uppercase tracking-wide">
-                New Event
-              </h3>
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <div className={cn("h-6 w-1 rounded-full", editingEventId ? "bg-amber-500" : "bg-primary")} />
+                <h3 className="font-semibold text-sm uppercase tracking-wide">
+                  {editingEventId ? "Edit Event" : "New Event"}
+                </h3>
+              </div>
+              {editingEventId && (
+                <Button variant="ghost" size="sm" onClick={handleCancelEdit} className="h-6 text-xs">
+                  <X className="mr-1 h-3 w-3" /> Cancel
+                </Button>
+              )}
             </div>
 
             <div className="grid gap-4">
@@ -203,14 +246,10 @@ export default function EventManager() {
                 </div>
               </div>
 
-              <div className="grid gap-2 w-full min-w-0 max-w-full">
+              <div className="grid gap-2 w-full min-w-0">
                 <Label>Link to Exam (Optional)</Label>
                 <Select value={selectedExamId} onValueChange={setSelectedExamId}>
-                  {/* FIX 1: THE CSS OVERRIDE
-                     We use [&>span]:block to kill the 'flex' layout from select.tsx
-                     We use [&>span]:truncate to enforce dots (...) 
-                  */}
-                  <SelectTrigger className="w-full bg-background [&>span]:block [&>span]:truncate [&>span]:w-full [&>span]:text-left">
+                  <SelectTrigger className="w-full bg-background min-w-0 overflow-hidden [&_[data-slot=select-value]]:block [&_[data-slot=select-value]]:truncate [&_[data-slot=select-value]]:text-left">
                     <SelectValue placeholder="Select an exam to link..." />
                   </SelectTrigger>
                   
@@ -229,26 +268,36 @@ export default function EventManager() {
 
               <div className="grid gap-2">
                 <Label>Description (Optional)</Label>
-                <Input
+                <Textarea
                   placeholder="Brief details..."
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  className="bg-background"
+                  className="bg-background min-h-[80px]"
                 />
               </div>
 
-              <Button
-                onClick={handleSave}
-                disabled={isSaving}
-                className="w-full mt-2"
-              >
-                {isSaving ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <Plus className="mr-2 h-4 w-4" />
+              <div className="flex gap-2">
+                <Button
+                    onClick={handleSave}
+                    disabled={isSaving}
+                    className={cn("flex-1", editingEventId && "bg-amber-600 hover:bg-amber-700")}
+                >
+                    {isSaving ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : editingEventId ? (
+                    <Pencil className="mr-2 h-4 w-4" />
+                    ) : (
+                    <Plus className="mr-2 h-4 w-4" />
+                    )}
+                    {editingEventId ? "Update Event" : "Add Event"}
+                </Button>
+                
+                {editingEventId && (
+                     <Button variant="outline" onClick={handleCancelEdit} disabled={isSaving}>
+                        Cancel
+                     </Button>
                 )}
-                Add Event
-              </Button>
+              </div>
             </div>
           </div>
 
@@ -278,8 +327,11 @@ export default function EventManager() {
                       <div
                         key={event.id}
                         // FIX 2: STRICT GRID COLUMNS
-                        // 50px for Date | 1fr for text (overflow hidden) | Auto for button
-                        className="group grid grid-cols-[50px_1fr_auto] items-center gap-3 p-2.5 border rounded-lg bg-card hover:border-primary/30 transition-all w-full"
+                        // 50px for Date | 1fr for text (overflow hidden) | Auto for buttons
+                        className={cn(
+                            "group grid grid-cols-[50px_1fr_auto] items-center gap-3 p-2.5 border rounded-lg bg-card hover:border-primary/30 transition-all w-full",
+                            editingEventId === event.id && "border-amber-500 bg-amber-50/10"
+                        )}
                       >
                         {/* 1. Date Box */}
                         <div className="flex flex-col items-center justify-center h-11 bg-muted/30 rounded-md border shrink-0">
@@ -329,15 +381,25 @@ export default function EventManager() {
                             </div>
                         </div>
 
-                        {/* 3. Delete Action */}
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 text-muted-foreground/40 hover:text-destructive hover:bg-destructive/10 shrink-0"
-                          onClick={() => event.id && handleDelete(event.id)}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
+                        {/* 3. Actions */}
+                        <div className="flex items-center gap-1 shrink-0">
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7 text-muted-foreground/40 hover:text-primary hover:bg-primary/10"
+                                onClick={() => handleEdit(event)}
+                            >
+                                <Pencil className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7 text-muted-foreground/40 hover:text-destructive hover:bg-destructive/10"
+                                onClick={() => event.id && handleDelete(event.id)}
+                            >
+                                <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                        </div>
                       </div>
                     );
                   })}

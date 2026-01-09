@@ -385,7 +385,7 @@ function EventRow({ event, showDateBadge, examColor, examName }: EventRowProps) 
                         {event.title}
                     </h3>
                     {event.description && (
-                        <p className="text-sm text-muted-foreground mt-1.5 leading-relaxed">
+                        <p className="text-sm text-muted-foreground mt-1.5 leading-relaxed whitespace-pre-wrap">
                             {event.description}
                         </p>
                     )}
