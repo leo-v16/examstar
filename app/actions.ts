@@ -344,3 +344,32 @@ export async function moveResourceAction(resourceId: string, targetSubject: stri
         return { success: false, error: e.message };
     }
 }
+
+export async function deleteResourceAction(resourceId: string): Promise<{ success: boolean; error?: string }> {
+    try {
+        if (!resourceId) throw new Error("Resource ID is required");
+        await adminDb.collection("resources").doc(resourceId).delete();
+        return { success: true };
+    } catch (e: any) {
+        console.error("Error deleting resource:", e);
+        return { success: false, error: e.message };
+    }
+}
+
+export async function deleteAllOrphanedResourcesAction(resourceIds: string[]): Promise<{ success: boolean; error?: string }> {
+    try {
+        if (!resourceIds || resourceIds.length === 0) return { success: true };
+        
+        const batch = adminDb.batch();
+        resourceIds.forEach(id => {
+            const ref = adminDb.collection("resources").doc(id);
+            batch.delete(ref);
+        });
+        
+        await batch.commit();
+        return { success: true };
+    } catch (e: any) {
+        console.error("Error deleting orphaned resources:", e);
+        return { success: false, error: e.message };
+    }
+}

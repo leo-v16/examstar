@@ -117,6 +117,11 @@ export const getResourceTypes = async (): Promise<string[]> => {
   }
 };
 
+export const setResourceTypes = async (types: string[]) => {
+  const ref = doc(db, "settings", "resource-types");
+  await setDoc(ref, { types });
+};
+
 export const addResourceType = async (newType: string) => {
   const ref = doc(db, "settings", "resource-types");
   const snap = await getDoc(ref);
@@ -248,6 +253,35 @@ export const getResources = async (
     const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
     return dateB - dateA;
   });
+};
+
+// --- Chapter Settings Helpers ---
+
+const generateChapterKey = (subject: string, classLevel: string, chapter: string) => {
+  // Simple sanitation to ensure valid ID. 
+  // We use a safe separator '___' that is unlikely to be in names, plus encoding.
+  return `${encodeURIComponent(subject)}___${encodeURIComponent(classLevel)}___${encodeURIComponent(chapter)}`;
+};
+
+export const getChapterTypeOrder = async (examId: string, subject: string, classLevel: string, chapter: string): Promise<string[] | null> => {
+    try {
+        const docId = generateChapterKey(subject, classLevel, chapter);
+        const ref = doc(db, "exams", examId, "chapter_settings", docId);
+        const snap = await getDoc(ref);
+        if (snap.exists()) {
+            return snap.data().typeOrder as string[];
+        }
+        return null;
+    } catch (e) {
+        console.error("Error getting chapter type order", e);
+        return null;
+    }
+};
+
+export const saveChapterTypeOrder = async (examId: string, subject: string, classLevel: string, chapter: string, typeOrder: string[]) => {
+    const docId = generateChapterKey(subject, classLevel, chapter);
+    const ref = doc(db, "exams", examId, "chapter_settings", docId);
+    await setDoc(ref, { typeOrder }, { merge: true });
 };
 
 export const uploadFile = async (file: File, path: string): Promise<string> => {

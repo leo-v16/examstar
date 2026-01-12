@@ -1,12 +1,12 @@
 "use client";
 
 import React, { useState } from "react";
-import { getOrphanedResourcesAction, moveResourceAction, getExamStructureAction } from "@/app/actions";
+import { getOrphanedResourcesAction, moveResourceAction, getExamStructureAction, deleteResourceAction, deleteAllOrphanedResourcesAction } from "@/app/actions";
 import { Resource, ExamStructure } from "@/lib/firestore";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, AlertTriangle, Check, Eye } from "lucide-react";
+import { Loader2, AlertTriangle, Check, Eye, Trash2 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -20,6 +20,7 @@ export default function OrphanedResourceManager({ examId }: Props) {
     const [structure, setStructure] = useState<ExamStructure | null>(null);
     const [loading, setLoading] = useState(false);
     const [hasFetched, setHasFetched] = useState(false);
+    const [deletingAll, setDeletingAll] = useState(false);
     
     // Viewer State
     const [viewingResource, setViewingResource] = useState<Resource | null>(null);
@@ -44,6 +45,26 @@ export default function OrphanedResourceManager({ examId }: Props) {
             console.error(error);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleDeleteAll = async () => {
+        if (!confirm("Are you sure you want to delete ALL orphaned resources? This cannot be undone.")) return;
+        
+        setDeletingAll(true);
+        try {
+            const ids = orphans.map(o => o.id).filter(id => id !== undefined) as string[];
+            const res = await deleteAllOrphanedResourcesAction(ids);
+            if (res.success) {
+                setOrphans([]);
+            } else {
+                alert("Failed to delete resources: " + res.error);
+            }
+        } catch (error) {
+            console.error(error);
+            alert("Error deleting resources");
+        } finally {
+            setDeletingAll(false);
         }
     };
 
@@ -89,13 +110,27 @@ export default function OrphanedResourceManager({ examId }: Props) {
         <div className="w-full max-w-[100vw] overflow-hidden">
             <Card className="border-yellow-500/20 bg-yellow-500/5 w-full">
                 <CardHeader>
-                    <CardTitle className="flex items-center gap-2 text-yellow-600 text-lg">
-                        <AlertTriangle className="h-5 w-5 shrink-0" />
-                        {orphans.length} Orphaned Resources
-                    </CardTitle>
-                    <CardDescription>
-                        Resources in deleted chapters.
-                    </CardDescription>
+                    <div className="flex items-center justify-between">
+                        <div className="space-y-1.5">
+                            <CardTitle className="flex items-center gap-2 text-yellow-600 text-lg">
+                                <AlertTriangle className="h-5 w-5 shrink-0" />
+                                {orphans.length} Orphaned Resources
+                            </CardTitle>
+                            <CardDescription>
+                                Resources in deleted chapters.
+                            </CardDescription>
+                        </div>
+                        <Button 
+                            variant="destructive" 
+                            size="sm" 
+                            onClick={handleDeleteAll} 
+                            disabled={deletingAll}
+                            className="shrink-0"
+                        >
+                            {deletingAll ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Trash2 className="h-4 w-4 mr-2" />}
+                            Delete All
+                        </Button>
+                    </div>
                 </CardHeader>
                 <CardContent className="p-0 sm:p-6">
                     {/* FIX 2: Restrict ScrollArea width specifically */}
@@ -107,6 +142,7 @@ export default function OrphanedResourceManager({ examId }: Props) {
                                     resource={resource} 
                                     structure={structure} 
                                     onMoved={(id) => setOrphans(prev => prev.filter(p => p.id !== id))}
+                                    onDelete={(id) => setOrphans(prev => prev.filter(p => p.id !== id))}
                                     onView={() => setViewingResource(resource)}
                                 />
                             ))}
@@ -139,11 +175,12 @@ export default function OrphanedResourceManager({ examId }: Props) {
     );
 }
 
-function OrphanRow({ resource, structure, onMoved, onView }: { resource: Resource, structure: ExamStructure | null, onMoved: (id: string) => void, onView: () => void }) {
+function OrphanRow({ resource, structure, onMoved, onDelete, onView }: { resource: Resource, structure: ExamStructure | null, onMoved: (id: string) => void, onDelete: (id: string) => void, onView: () => void }) {
     const [selectedSubject, setSelectedSubject] = useState("");
     const [selectedClass, setSelectedClass] = useState("");
     const [selectedChapter, setSelectedChapter] = useState("");
     const [saving, setSaving] = useState(false);
+    const [deleting, setDeleting] = useState(false);
 
     const subjects = structure?.subjects || [];
     const classes = subjects.find(s => s.name === selectedSubject)?.classes || [];
@@ -164,6 +201,24 @@ function OrphanRow({ resource, structure, onMoved, onView }: { resource: Resourc
             alert("Error moving resource");
         } finally {
             setSaving(false);
+        }
+    };
+
+    const handleDelete = async () => {
+        if (!resource.id || !confirm("Delete this resource?")) return;
+        setDeleting(true);
+        try {
+            const res = await deleteResourceAction(resource.id);
+            if (res.success) {
+                onDelete(resource.id);
+            } else {
+                alert("Failed to delete: " + res.error);
+            }
+        } catch (e) {
+            console.error(e);
+            alert("Error deleting resource");
+        } finally {
+            setDeleting(false);
         }
     };
 
@@ -201,7 +256,7 @@ function OrphanRow({ resource, structure, onMoved, onView }: { resource: Resourc
             </div>
 
             {/* Controls Section */}
-            <div className="space-y-2 pt-1 border-t sm:border-t-0 sm:pt-0 w-full">
+            <div className="space-y-3 pt-3 border-t w-full">
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 w-full min-w-0">
                     {/* FIX 5: The Select Truncation Hack again (forces selects to stay inside container) */}
                     <div className="w-full min-w-0">
@@ -238,15 +293,28 @@ function OrphanRow({ resource, structure, onMoved, onView }: { resource: Resourc
                     </div>
                 </div>
 
-                <Button 
-                    size="sm" 
-                    onClick={handleMove} 
-                    disabled={saving || !selectedChapter}
-                    className="h-8 text-xs w-full sm:w-auto sm:ml-auto block"
-                >
-                    {saving ? <Loader2 className="h-3 w-3 animate-spin mr-1 inline" /> : null}
-                    Move Resource
-                </Button>
+                <div className="flex gap-2 w-full pt-1">
+                    <Button 
+                        size="sm" 
+                        onClick={handleMove} 
+                        disabled={saving || !selectedChapter || deleting}
+                        className="h-9 text-xs flex-1 gap-2"
+                    >
+                        {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+                        Move Resource
+                    </Button>
+                    <Button 
+                        variant="destructive"
+                        size="sm"
+                        onClick={handleDelete}
+                        disabled={deleting || saving}
+                        className="h-9 gap-2 px-4 text-xs"
+                        title="Delete Resource"
+                    >
+                        {deleting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                        <span>Delete</span>
+                    </Button>
+                </div>
             </div>
         </div>
     );

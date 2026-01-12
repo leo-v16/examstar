@@ -12,7 +12,10 @@ import {
   addResourceType,
   deleteResourceType,
   updateResourceType,
-  updateResourceOrder
+  updateResourceOrder,
+  setResourceTypes,
+  getChapterTypeOrder,
+  saveChapterTypeOrder
 } from "@/lib/firestore";
 import {
   DndContext, 
@@ -44,8 +47,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Loader2, Link as LinkIcon, Save, Trash2, FileText, ExternalLink, Plus, Settings2, Pencil, Check, X, GripVertical } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
+import { Loader2, Link as LinkIcon, Save, Trash2, FileText, ExternalLink, Plus, Settings2, Pencil, Check, X, GripVertical, ListOrdered } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
@@ -127,6 +130,116 @@ function SortableResourceItem({ resource, onDelete }: { resource: Resource; onDe
   );
 }
 
+// --- Sortable Type Item Component ---
+interface SortableTypeItemProps {
+    type: string;
+    isEditing: boolean;
+    editTypeName: string;
+    setEditTypeName: (val: string) => void;
+    onEdit: () => void;
+    onSave: () => void;
+    onCancel: () => void;
+    onDelete: () => void;
+}
+
+function SortableTypeItem({ type, isEditing, editTypeName, setEditTypeName, onEdit, onSave, onCancel, onDelete }: SortableTypeItemProps) {
+    const {
+        attributes,
+        listeners,
+        setNodeRef,
+        transform,
+        transition,
+        isDragging
+    } = useSortable({ id: `type-${type}` });
+
+    const style = {
+        transform: CSS.Transform.toString(transform),
+        transition,
+        zIndex: isDragging ? 10 : 1,
+        opacity: isDragging ? 0.5 : 1,
+    };
+
+    return (
+        <div ref={setNodeRef} style={style} className="flex items-center justify-between p-2 border rounded-md bg-card group">
+            {isEditing ? (
+                <div className="flex items-center gap-2 flex-1 pl-7"> {/* pl-7 to align with non-editing state if needed, or just let it float */}
+                    <Input 
+                        value={editTypeName} 
+                        onChange={(e) => setEditTypeName(e.target.value)}
+                        className="h-8"
+                    />
+                    <Button size="icon" variant="ghost" className="h-8 w-8 text-green-600" onClick={onSave}>
+                        <Check className="h-4 w-4" />
+                    </Button>
+                    <Button size="icon" variant="ghost" className="h-8 w-8 text-muted-foreground" onClick={onCancel}>
+                        <X className="h-4 w-4" />
+                    </Button>
+                </div>
+            ) : (
+                <>
+                    <div className="flex items-center gap-2">
+                         {/* Drag Handle */}
+                        <div 
+                            {...attributes} 
+                            {...listeners} 
+                            className="cursor-grab hover:text-foreground active:cursor-grabbing text-muted-foreground transition-colors touch-none"
+                        >
+                            <GripVertical size={14} />
+                        </div>
+                        <span className="capitalize font-medium">{type.replace('-', ' ')}</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                        <Button size="icon" variant="ghost" className="h-8 w-8 text-muted-foreground" onClick={onEdit}>
+                            <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button 
+                            size="icon" 
+                            variant="ghost" 
+                            className="h-8 w-8 text-destructive/70 hover:text-destructive" 
+                            onClick={onDelete}
+                            disabled={['note', 'pyq', 'practice'].includes(type)}
+                        >
+                            <Trash2 className="h-4 w-4" />
+                        </Button>
+                    </div>
+                </>
+            )}
+        </div>
+    );
+}
+
+// --- Simple Sortable Item (For Chapter Order) ---
+function SortableSimpleItem({ id, text }: { id: string; text: string }) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging
+  } = useSortable({ id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    zIndex: isDragging ? 10 : 1,
+    opacity: isDragging ? 0.8 : 1,
+  };
+
+  return (
+    <div ref={setNodeRef} style={style} className="flex items-center gap-3 p-3 border rounded-md bg-card select-none">
+       <div 
+            {...attributes} 
+            {...listeners} 
+            className="cursor-grab hover:text-foreground active:cursor-grabbing text-muted-foreground transition-colors touch-none"
+        >
+            <GripVertical size={14} />
+        </div>
+        <span className="capitalize font-medium">{text}</span>
+    </div>
+  );
+}
+
 export default function ResourceUploader() {
   const [exams, setExams] = useState<Exam[]>([]);
   const [availableTypes, setAvailableTypes] = useState<string[]>([]);
@@ -146,6 +259,11 @@ export default function ResourceUploader() {
   const [isTypeManagerOpen, setIsTypeManagerOpen] = useState(false);
   const [editingType, setEditingType] = useState<string | null>(null);
   const [editTypeName, setEditTypeName] = useState("");
+
+  // Chapter Order State
+  const [isChapterOrderOpen, setIsChapterOrderOpen] = useState(false);
+  const [chapterTypeOrder, setChapterTypeOrder] = useState<string[]>([]);
+  const [loadingChapterOrder, setLoadingChapterOrder] = useState(false);
 
   const [year, setYear] = useState("");
   const [title, setTitle] = useState("");
@@ -192,6 +310,38 @@ export default function ResourceUploader() {
     refreshResources();
   }, [selectedExamId, selectedSubject, selectedClass, selectedChapter, resourceType]);
 
+  // Fetch chapter order when chapter is selected
+  useEffect(() => {
+    const fetchChapterOrder = async () => {
+      if (!selectedExamId || !selectedSubject || !selectedClass || !selectedChapter) return;
+      
+      setLoadingChapterOrder(true);
+      try {
+        const order = await getChapterTypeOrder(selectedExamId, selectedSubject, selectedClass, selectedChapter);
+        if (order && order.length > 0) {
+           // Merge with available types to ensure new types are included
+           // Filter out types that no longer exist
+           const validTypes = order.filter(t => availableTypes.includes(t));
+           const missingTypes = availableTypes.filter(t => !validTypes.includes(t));
+           setChapterTypeOrder([...validTypes, ...missingTypes]);
+        } else {
+           setChapterTypeOrder(availableTypes);
+        }
+      } catch (err) {
+        console.error("Failed to fetch chapter order:", err);
+        setChapterTypeOrder(availableTypes);
+      } finally {
+        setLoadingChapterOrder(false);
+      }
+    };
+    
+    // Only fetch if we have selected everything and availableTypes is populated
+    if (availableTypes.length > 0) {
+        fetchChapterOrder();
+    }
+  }, [selectedExamId, selectedSubject, selectedClass, selectedChapter, availableTypes]);
+
+
   // Derived Data
   const selectedExam = exams.find((e) => e.id === selectedExamId);
   const subjects = selectedExam?.structure.subjects || [];
@@ -203,8 +353,11 @@ export default function ResourceUploader() {
   const chapters = selectedClassData?.chapters || [];
 
   const sensors = useSensors(
-    useSensor(PointerSensor),
-    useSensor(TouchSensor),
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 5,
+      },
+    }),
     useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates,
     })
@@ -232,6 +385,56 @@ export default function ResourceUploader() {
             refreshResources();
         }
     }
+  };
+  
+  const handleTypeDragEnd = async (event: DragEndEvent) => {
+      const { active, over } = event;
+      
+      if (over && active.id !== over.id) {
+          const activeId = active.id as string;
+          const overId = over.id as string;
+          
+          // IDs are prefixed with "type-"
+          const type1 = activeId.replace("type-", "");
+          const type2 = overId.replace("type-", "");
+          
+          const oldIndex = availableTypes.indexOf(type1);
+          const newIndex = availableTypes.indexOf(type2);
+          
+          if (oldIndex !== -1 && newIndex !== -1) {
+              const newTypes = arrayMove(availableTypes, oldIndex, newIndex);
+              setAvailableTypes(newTypes);
+              
+              try {
+                  await setResourceTypes(newTypes);
+              } catch (error) {
+                  console.error("Failed to save type order:", error);
+                  alert("Failed to save type order");
+              }
+          }
+      }
+  };
+
+  const handleChapterTypeDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (over && active.id !== over.id) {
+       const oldIndex = chapterTypeOrder.indexOf(active.id as string);
+       const newIndex = chapterTypeOrder.indexOf(over.id as string);
+       if (oldIndex !== -1 && newIndex !== -1) {
+           setChapterTypeOrder(arrayMove(chapterTypeOrder, oldIndex, newIndex));
+       }
+    }
+  };
+
+  const saveChapterOrder = async () => {
+     if (!selectedExamId || !selectedSubject || !selectedClass || !selectedChapter) return;
+     try {
+         await saveChapterTypeOrder(selectedExamId, selectedSubject, selectedClass, selectedChapter, chapterTypeOrder);
+         setIsChapterOrderOpen(false);
+     } catch (err) {
+         console.error("Failed to save chapter order:", err);
+         alert("Failed to save chapter order");
+     }
   };
 
   // Set default type
@@ -475,88 +678,139 @@ export default function ResourceUploader() {
 
           {/* 2. Resource Details */}
           <div className="space-y-4">
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label>Resource Type</Label>
-                <Dialog open={isTypeManagerOpen} onOpenChange={setIsTypeManagerOpen}>
-                    <DialogTrigger asChild>
-                        <Button variant="ghost" size="sm" className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground">
-                            <Settings2 className="h-3 w-3 mr-1" />
-                            Manage
-                        </Button>
-                    </DialogTrigger>
-                    <DialogContent>
-                        <DialogHeader>
-                            <DialogTitle>Manage Resource Types</DialogTitle>
-                        </DialogHeader>
-                        
-                        {/* Add New Type Section */}
-                        <div className="flex items-center gap-2 mb-4 p-2 bg-muted/30 rounded-md border">
-                            <Input 
-                                placeholder="Add new type (e.g. syllabus)" 
-                                value={newTypeName} 
-                                onChange={(e) => setNewTypeName(e.target.value)}
-                                className="h-8 text-sm"
-                            />
-                            <Button size="sm" onClick={handleAddType} disabled={!newTypeName} className="h-8 shrink-0">
-                                <Plus className="h-3 w-3 mr-1" /> Add
+            <div className="space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b pb-2">
+                <div className="flex items-center gap-2">
+                    <ListOrdered className="h-4 w-4 text-primary" />
+                    <Label className="text-base font-semibold">Resource Type</Label>
+                </div>
+                <div className="flex items-center gap-1.5">
+                    {/* Global Manager */}
+                    <Dialog open={isTypeManagerOpen} onOpenChange={setIsTypeManagerOpen}>
+                        <DialogTrigger asChild>
+                            <Button variant="outline" size="sm" className="h-7 px-2 text-[10px] sm:text-xs uppercase tracking-wider font-bold bg-muted/50">
+                                <Settings2 className="h-3 w-3 mr-1" />
+                                Global Types
                             </Button>
-                        </div>
-
-                        <ScrollArea className="max-h-[300px] pr-4">
-                            <div className="space-y-2">
-                                {availableTypes.map((type) => (
-                                    <div key={type} className="flex items-center justify-between p-2 border rounded-md bg-card">
-                                        {editingType === type ? (
-                                            <div className="flex items-center gap-2 flex-1">
-                                                <Input 
-                                                    value={editTypeName} 
-                                                    onChange={(e) => setEditTypeName(e.target.value)}
-                                                    className="h-8"
-                                                />
-                                                <Button size="icon" variant="ghost" className="h-8 w-8 text-green-600" onClick={saveEditedType}>
-                                                    <Check className="h-4 w-4" />
-                                                </Button>
-                                                <Button size="icon" variant="ghost" className="h-8 w-8 text-muted-foreground" onClick={() => setEditingType(null)}>
-                                                    <X className="h-4 w-4" />
-                                                </Button>
-                                            </div>
-                                        ) : (
-                                            <>
-                                                <span className="capitalize font-medium">{type.replace('-', ' ')}</span>
-                                                <div className="flex items-center gap-1">
-                                                    <Button size="icon" variant="ghost" className="h-8 w-8 text-muted-foreground" onClick={() => startEditingType(type)}>
-                                                        <Pencil className="h-4 w-4" />
-                                                    </Button>
-                                                    <Button 
-                                                        size="icon" 
-                                                        variant="ghost" 
-                                                        className="h-8 w-8 text-destructive/70 hover:text-destructive" 
-                                                        onClick={() => handleDeleteType(type)}
-                                                        disabled={['note', 'pyq', 'practice'].includes(type)}
-                                                    >
-                                                        <Trash2 className="h-4 w-4" />
-                                                    </Button>
-                                                </div>
-                                            </>
-                                        )}
-                                    </div>
-                                ))}
+                        </DialogTrigger>
+                        <DialogContent>
+                            <DialogHeader>
+                                <DialogTitle>Manage Global Resource Types</DialogTitle>
+                            </DialogHeader>
+                            
+                            {/* Add New Type Section */}
+                            <div className="flex items-center gap-2 mb-4 p-2 bg-muted/30 rounded-md border">
+                                <Input 
+                                    placeholder="Add new type (e.g. syllabus)" 
+                                    value={newTypeName} 
+                                    onChange={(e) => setNewTypeName(e.target.value)}
+                                    className="h-8 text-sm"
+                                />
+                                <Button size="sm" onClick={handleAddType} disabled={!newTypeName} className="h-8 shrink-0">
+                                    <Plus className="h-3 w-3 mr-1" /> Add
+                                </Button>
                             </div>
-                        </ScrollArea>
-                    </DialogContent>
-                </Dialog>
+
+                            <ScrollArea className="max-h-[300px] pr-4">
+                                <DndContext 
+                                    sensors={sensors} 
+                                    collisionDetection={closestCenter} 
+                                    onDragEnd={handleTypeDragEnd}
+                                >
+                                    <SortableContext 
+                                        items={availableTypes.map(t => `type-${t}`)}
+                                        strategy={verticalListSortingStrategy}
+                                    >
+                                        <div className="space-y-2">
+                                            {availableTypes.map((type) => (
+                                                <SortableTypeItem 
+                                                    key={`type-${type}`}
+                                                    type={type}
+                                                    isEditing={editingType === type}
+                                                    editTypeName={editTypeName}
+                                                    setEditTypeName={setEditTypeName}
+                                                    onEdit={() => startEditingType(type)}
+                                                    onSave={saveEditedType}
+                                                    onCancel={() => setEditingType(null)}
+                                                    onDelete={() => handleDeleteType(type)}
+                                                />
+                                            ))}
+                                        </div>
+                                    </SortableContext>
+                                </DndContext>
+                            </ScrollArea>
+                        </DialogContent>
+                    </Dialog>
+                    
+                    {/* Chapter Order Manager */}
+                    {selectedChapter && (
+                        <Dialog open={isChapterOrderOpen} onOpenChange={setIsChapterOrderOpen}>
+                            <DialogTrigger asChild>
+                                <Button variant="outline" size="sm" className="h-7 px-2 text-[10px] sm:text-xs uppercase tracking-wider font-bold bg-muted/50">
+                                    <ListOrdered className="h-3 w-3 mr-1" />
+                                    Chapter Order
+                                </Button>
+                            </DialogTrigger>
+                            <DialogContent>
+                                <DialogHeader>
+                                    <DialogTitle>Order Types for {selectedChapter}</DialogTitle>
+                                </DialogHeader>
+                                <div className="text-sm text-muted-foreground mb-4">
+                                    Drag to reorder how types appear for this specific chapter.
+                                </div>
+                                
+                                {loadingChapterOrder ? (
+                                    <div className="flex justify-center p-4">
+                                        <Loader2 className="animate-spin h-6 w-6" />
+                                    </div>
+                                ) : (
+                                    <ScrollArea className="max-h-[300px] pr-4">
+                                        <DndContext 
+                                            sensors={sensors} 
+                                            collisionDetection={closestCenter} 
+                                            onDragEnd={handleChapterTypeDragEnd}
+                                        >
+                                            <SortableContext 
+                                                items={chapterTypeOrder}
+                                                strategy={verticalListSortingStrategy}
+                                            >
+                                                <div className="space-y-2">
+                                                    {chapterTypeOrder.map((type) => (
+                                                        <SortableSimpleItem 
+                                                            key={type}
+                                                            id={type}
+                                                            text={type.replace('-', ' ')}
+                                                        />
+                                                    ))}
+                                                </div>
+                                            </SortableContext>
+                                        </DndContext>
+                                    </ScrollArea>
+                                )}
+                                <DialogFooter>
+                                    <Button variant="outline" onClick={() => setIsChapterOrderOpen(false)}>Cancel</Button>
+                                    <Button onClick={saveChapterOrder}>Save Order</Button>
+                                </DialogFooter>
+                            </DialogContent>
+                        </Dialog>
+                    )}
+                </div>
               </div>
 
               <RadioGroup 
                 value={resourceType} 
                 onValueChange={setResourceType}
-                className="flex gap-3 flex-wrap"
+                className="grid grid-cols-2 sm:grid-cols-3 gap-2"
               >
                 {availableTypes.map((type) => (
-                    <div key={type} className="flex items-center space-x-2 border rounded-md px-3 py-2 bg-muted/10 has-[[data-state=checked]]:bg-primary/10 has-[[data-state=checked]]:border-primary/50 transition-colors">
-                        <RadioGroupItem value={type} id={`r-${type}`} />
-                        <Label htmlFor={`r-${type}`} className="capitalize cursor-pointer font-medium text-sm">{type.replace('-', ' ')}</Label>
+                    <div key={type} className="relative">
+                        <RadioGroupItem value={type} id={`r-${type}`} className="peer sr-only" />
+                        <Label 
+                            htmlFor={`r-${type}`} 
+                            className="flex items-center justify-center px-3 py-2.5 rounded-md border-2 border-muted bg-popover hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary peer-data-[state=checked]:bg-primary/5 peer-data-[state=checked]:text-primary cursor-pointer transition-all text-center text-xs sm:text-sm font-bold capitalize select-none"
+                        >
+                            {type.replace('-', ' ')}
+                        </Label>
                     </div>
                 ))}
               </RadioGroup>

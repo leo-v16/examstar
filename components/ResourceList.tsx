@@ -4,7 +4,7 @@ import React, { useEffect, useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { FileText, BookOpen, Loader2, Eye, PenTool, Layout, Video, HelpCircle } from "lucide-react";
-import { getResources, Resource } from "@/lib/firestore";
+import { getResources, Resource, getResourceTypes, getChapterTypeOrder } from "@/lib/firestore";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 
@@ -27,6 +27,7 @@ const TYPE_ICONS: Record<string, React.ElementType> = {
 export default function ResourceList({ examId, subject, classLevel, chapter }: ResourceListProps) {
   const [loading, setLoading] = useState(true);
   const [resources, setResources] = useState<Resource[]>([]);
+  const [typeOrder, setTypeOrder] = useState<string[]>([]);
   
   // Viewer State
   const [selectedResource, setSelectedResource] = useState<Resource | null>(null);
@@ -34,16 +35,23 @@ export default function ResourceList({ examId, subject, classLevel, chapter }: R
 
   useEffect(() => {
     let isMounted = true;
-    const fetchResources = async () => {
+    const fetchData = async () => {
       setLoading(true);
       try {
-        const data = await getResources(examId, subject, classLevel, chapter);
+        // Fetch resources, global order, and chapter-specific order
+        const [resourcesData, globalOrder, chapterOrder] = await Promise.all([
+            getResources(examId, subject, classLevel, chapter),
+            getResourceTypes(),
+            getChapterTypeOrder(examId, subject, classLevel, chapter)
+        ]);
         
         if (isMounted) {
-          setResources(data);
+          setResources(resourcesData);
+          // Use chapter specific order if available, otherwise global
+          setTypeOrder(chapterOrder || globalOrder);
         }
       } catch (error) {
-        console.error("Failed to fetch resources:", error);
+        console.error("Failed to fetch data:", error);
       } finally {
         if (isMounted) {
           setLoading(false);
@@ -51,7 +59,7 @@ export default function ResourceList({ examId, subject, classLevel, chapter }: R
       }
     };
 
-    fetchResources();
+    fetchData();
 
     return () => {
       isMounted = false;
@@ -66,14 +74,23 @@ export default function ResourceList({ examId, subject, classLevel, chapter }: R
     return acc;
   }, {} as Record<string, Resource[]>);
 
-  const availableTypes = Object.keys(resourcesByType);
+  // Sort available types based on resolved order
+  const availableTypes = Object.keys(resourcesByType).sort((a, b) => {
+    const indexA = typeOrder.indexOf(a);
+    const indexB = typeOrder.indexOf(b);
+    
+    // If both exist in order array, sort by index
+    if (indexA !== -1 && indexB !== -1) return indexA - indexB;
+    // If only A exists, it comes first
+    if (indexA !== -1) return -1;
+    // If only B exists, it comes first
+    if (indexB !== -1) return 1;
+    // If neither exists, sort alphabetically
+    return a.localeCompare(b);
+  });
   
   // Default tab logic
-  // Priority: note -> pyq -> practice -> others
-  const defaultTab = availableTypes.includes("note") ? "note" 
-                   : availableTypes.includes("pyq") ? "pyq" 
-                   : availableTypes.includes("practice") ? "practice" 
-                   : availableTypes[0] || "";
+  const defaultTab = availableTypes.length > 0 ? availableTypes[0] : "";
 
   const openViewer = (resource: Resource) => {
     setSelectedResource(resource);
